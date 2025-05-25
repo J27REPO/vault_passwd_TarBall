@@ -1,6 +1,6 @@
 {
   "name": "gestor-contrasenas-seguro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Gestor de contraseñas local y seguro empaquetado con Electron.",
   "main": "main.js",
   "scripts": {
