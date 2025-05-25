@@ -22,18 +22,24 @@
   "build": {
     "appId": "com.tu-dominio.gestorcontrasenaseguro",
     "productName": "Gestor de Contraseñas Seguro",
+    "files": [ // Asegúrate de que 'files' no excluya la carpeta build si usas patrones restrictivos
+      "main.js",
+      "preload.js",
+      "gestor_contrasenas.html",
+      "build/icon.png" // Puedes incluirlo aquí si quieres que esté en el asar o para otros propósitos
+    ],
     "linux": {
       "target": [
         "tar.gz"
       ],
       "category": "Utility;Security;",
-      "icon": "build/icon.png"
-    },
-    "files": [
-      "main.js",
-      "preload.js",
-      "gestor_contrasenas.html",
-      "node_modules/**/*"
-    ]
+      "icon": "build/icon.png", // Fuente del icono para electron-builder
+      "extraFiles": [ // Esto copiará el icono a la raíz de la app desempaquetada
+        {
+          "from": "build/icon.png",
+          "to": "icon.png"
+        }
+      ]
+    }
   }
 }
