@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Contraseñas Seguro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* bg-gray-900 */
+            color: #e2e8f0; /* text-gray-200 */
+        }
+        .input-field {
+            background-color: #2d3748; /* bg-gray-700 */
+            border-color: #4a5568; /* border-gray-600 */
+            color: #e2e8f0; /* text-gray-200 */
+        }
+        .input-field:focus {
+            border-color: #4299e1; /* border-blue-500 */
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5);
+        }
+        .btn {
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .password-entry {
+            border-left-width: 4px;
+        }
+        .category-work { border-left-color: #3b82f6; /* blue-500 */ }
+        .category-personal { border-left-color: #10b981; /* emerald-500 */ }
+        .category-social { border-left-color: #ec4899; /* pink-500 */ }
+        .category-finance { border-left-color: #f59e0b; /* amber-500 */ }
+        .category-other { border-left-color: #6b7280; /* gray-500 */ }
+
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d3748; /* bg-gray-700 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a5568; /* bg-gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096; /* bg-gray-500 */
+        }
+        /* Modal styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 100; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+        }
+        .modal-content {
+            background-color: #2d3748; /* bg-gray-700 */
+            margin: 15% auto; /* 15% from the top and centered */
+            padding: 20px;
+            border: 1px solid #4a5568; /* border-gray-600 */
+            width: 80%; /* Could be more or less, depending on screen size */
+            max-width: 500px;
+            border-radius: 0.5rem; /* rounded-lg */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .close-button {
+            color: #a0aec0; /* text-gray-400 */
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #e2e8f0; /* text-gray-200 */
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div id="app-container" class="w-full max-w-2xl bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl">
+
+        <div id="master-password-screen">
+            <h1 class="text-3xl font-bold text-center text-blue-400 mb-6">Gestor de Contraseñas</h1>
+            <div id="master-password-setup" class="hidden">
+                <h2 class="text-xl font-semibold text-center mb-4">Configura tu Contraseña Maestra</h2>
+                <p class="text-sm text-gray-400 mb-4 text-center">Esta contraseña protegerá todas tus demás contraseñas. ¡No la olvides!</p>
+                <input type="password" id="new-master-password" placeholder="Nueva Contraseña Maestra" class="w-full p-3 mb-3 rounded-md input-field">
+                <input type="password" id="confirm-master-password" placeholder="Confirma Contraseña Maestra" class="w-full p-3 mb-4 rounded-md input-field">
+                <button id="set-master-password-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-md font-semibold btn">Establecer Contraseña Maestra</button>
+            </div>
+
+            <div id="master-password-login" class="hidden">
+                <h2 class="text-xl font-semibold text-center mb-4">Ingresa tu Contraseña Maestra</h2>
+                <input type="password" id="login-master-password" placeholder="Contraseña Maestra" class="w-full p-3 mb-4 rounded-md input-field">
+                <button id="login-btn" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-md font-semibold btn">Desbloquear Bóveda</button>
+            </div>
+            <p id="master-password-error" class="text-red-400 text-sm mt-3 text-center"></p>
+        </div>
+
+        <div id="vault-screen" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-blue-400">Mi Bóveda de Contraseñas</h1>
+                <button id="lock-vault-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-semibold btn flex items-center">
+                    <i class="fas fa-lock mr-2"></i>Bloquear
+                </button>
+            </div>
+
+            <div class="bg-gray-700 p-6 rounded-lg mb-6 shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-100">Añadir Nueva Contraseña</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" id="site-name" placeholder="Nombre del Sitio/App (ej: Amazon)" class="p-3 rounded-md input-field">
+                    <input type="text" id="username" placeholder="Nombre de Usuario (ej: usuario@mail.com)" class="p-3 rounded-md input-field">
+                    <div class="relative">
+                        <input type="password" id="site-password" placeholder="Contraseña" class="w-full p-3 rounded-md input-field pr-10">
+                        <button type="button" id="toggle-password-visibility-add" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                     <button id="generate-password-btn" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 p-3 rounded-md font-semibold btn text-sm flex items-center justify-center">
+                        <i class="fas fa-key mr-2"></i>Generar Contraseña
+                    </button>
+                    <select id="category" class="p-3 rounded-md input-field">
+                        <option value="other">Otra</option>
+                        <option value="work">Trabajo</option>
+                        <option value="personal">Personal</option>
+                        <option value="social">Redes Sociales</option>
+                        <option value="finance">Finanzas</option>
+                    </select>
+                    <textarea id="notes" placeholder="Notas adicionales (opcional)" rows="2" class="md:col-span-2 p-3 rounded-md input-field"></textarea>
+                </div>
+                <button id="add-password-btn" class="mt-4 w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-md font-semibold btn flex items-center justify-center">
+                    <i class="fas fa-plus-circle mr-2"></i>Añadir Contraseña
+                </button>
+                <p id="add-password-error" class="text-red-400 text-sm mt-2"></p>
+            </div>
+
+            <div class="mb-4">
+                <input type="text" id="search-passwords" placeholder="Buscar contraseñas..." class="w-full p-3 rounded-md input-field">
+            </div>
+            
+            <div id="password-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                </div>
+             <p id="empty-vault-message" class="text-center text-gray-400 py-4 hidden">Tu bóveda está vacía. ¡Añade tu primera contraseña!</p>
+        </div>
+    </div>
+
+    <div id="messageModal" class="modal">
+      <div class="modal-content">
+        <span class="close-button" onclick="closeModal()">&times;</span>
+        <p id="modalMessageText" class="text-gray-200"></p>
+      </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const masterPasswordScreen = document.getElementById('master-password-screen');
+        const masterPasswordSetupDiv = document.getElementById('master-password-setup');
+        const masterPasswordLoginDiv = document.getElementById('master-password-login');
+        const newMasterPasswordInput = document.getElementById('new-master-password');
+        const confirmMasterPasswordInput = document.getElementById('confirm-master-password');
+        const setMasterPasswordBtn = document.getElementById('set-master-password-btn');
+        const loginMasterPasswordInput = document.getElementById('login-master-password');
+        const loginBtn = document.getElementById('login-btn');
+        const masterPasswordError = document.getElementById('master-password-error');
+
+        const vaultScreen = document.getElementById('vault-screen');
+        const lockVaultBtn = document.getElementById('lock-vault-btn');
+        
+        const siteNameInput = document.getElementById('site-name');
+        const usernameInput = document.getElementById('username');
+        const sitePasswordInput = document.getElementById('site-password');
+        const categoryInput = document.getElementById('category');
+        const notesInput = document.getElementById('notes');
+        const addPasswordBtn = document.getElementById('add-password-btn');
+        const addPasswordError = document.getElementById('add-password-error');
+        const passwordListDiv = document.getElementById('password-list');
+        const emptyVaultMessage = document.getElementById('empty-vault-message');
+        const searchPasswordsInput = document.getElementById('search-passwords');
+        const togglePasswordVisibilityAddBtn = document.getElementById('toggle-password-visibility-add');
+        const generatePasswordBtn = document.getElementById('generate-password-btn');
+
+        const messageModal = document.getElementById('messageModal');
+        const modalMessageText = document.getElementById('modalMessageText');
+        const closeButton = document.querySelector('.close-button');
+
+        // App state
+        let masterKey = null; // Stores the derived master key for the session
+        let passwords = []; // In-memory array of decrypted password objects
+        const VAULT_STORAGE_KEY = 'securePasswordVault';
+
+        // --- Modal Functions ---
+        function showModal(message) {
+            modalMessageText.textContent = message;
+            messageModal.style.display = "block";
+        }
+
+        function closeModal() {
+            messageModal.style.display = "none";
+        }
+        // Close modal if user clicks outside of it
+        window.onclick = function(event) {
+            if (event.target == messageModal) {
+                closeModal();
+            }
+        }
+        closeButton.onclick = closeModal;
+
+
+        // --- Crypto Utilities ---
+        // Convert ArrayBuffer to Hex string
+        function bufferToHex(buffer) {
+            return Array.from(new Uint8Array(buffer))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Convert Hex string to ArrayBuffer
+        function hexToBuffer(hexString) {
+            const bytes = new Uint8Array(hexString.length / 2);
+            for (let i = 0; i < hexString.length; i += 2) {
+                bytes[i / 2] = parseInt(hexString.substring(i, i + 2), 16);
+            }
+            return bytes.buffer;
+        }
+
+        // Derive a key from a password using PBKDF2
+        async function deriveKey(password, salt) {
+            const encoder = new TextEncoder();
+            const keyMaterial = await window.crypto.subtle.importKey(
+                'raw',
+                encoder.encode(password),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            return window.crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: 100000, // Standard number of iterations
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                true, // exportable
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        // Encrypt data using AES-GCM
+        async function encryptData(key, data) {
+            const encoder = new TextEncoder();
+            const iv = window.crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV is recommended for AES-GCM
+            const ciphertext = await window.crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encoder.encode(data) // Data must be ArrayBuffer or BufferSource
+            );
+            return { ciphertext, iv };
+        }
+
+        // Decrypt data using AES-GCM
+        async function decryptData(key, ciphertext, iv) {
+            try {
+                const decrypted = await window.crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: iv },
+                    key,
+                    ciphertext
+                );
+                const decoder = new TextDecoder();
+                return decoder.decode(decrypted);
+            } catch (e) {
+                console.error("Decryption failed:", e);
+                return null; // Indicates decryption failure (e.g., wrong key)
+            }
+        }
+
+        // --- Vault Management ---
+        async function saveVault() {
+            if (!masterKey || passwords === null) {
+                console.error("Master key not set or passwords array is null. Cannot save vault.");
+                return;
+            }
+            try {
+                const vaultData = JSON.parse(localStorage.getItem(VAULT_STORAGE_KEY)) || {};
+                const salt = vaultData.salt ? hexToBuffer(vaultData.salt) : window.crypto.getRandomValues(new Uint8Array(16));
+                
+                // Re-derive key if salt was just generated (e.g. first save after setup without explicit save)
+                // This ensures the key used for encryption matches the stored salt.
+                // However, masterKey should already be derived with the correct salt during login/setup.
+                // This is more of a safeguard.
+                const currentKey = masterKey; // Assume masterKey is correctly derived
+
+                const { ciphertext, iv } = await encryptData(currentKey, JSON.stringify(passwords));
+                
+                localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify({
+                    salt: bufferToHex(salt), // Store salt used for key derivation
+                    iv: bufferToHex(iv),     // Store IV used for this encryption
+                    ciphertext: bufferToHex(ciphertext) // Store the encrypted data
+                }));
+            } catch (error) {
+                console.error("Error saving vault:", error);
+                showModal("Error al guardar la bóveda: " + error.message);
+            }
+        }
+        
+        function loadPasswordsFromStorage() {
+            const storedVault = localStorage.getItem(VAULT_STORAGE_KEY);
+            if (!storedVault) {
+                masterPasswordSetupDiv.classList.remove('hidden');
+                masterPasswordLoginDiv.classList.add('hidden');
+                return false; // No vault found, go to setup
+            }
+            masterPasswordLoginDiv.classList.remove('hidden');
+            masterPasswordSetupDiv.classList.add('hidden');
+            return true; // Vault found, go to login
+        }
+
+        // --- UI Rendering ---
+        function renderPasswords(filteredPasswords = passwords) {
+            passwordListDiv.innerHTML = ''; // Clear existing list
+            if (filteredPasswords.length === 0 && passwords.length === 0) {
+                 emptyVaultMessage.classList.remove('hidden');
+            } else if (filteredPasswords.length === 0 && passwords.length > 0) {
+                emptyVaultMessage.classList.add('hidden');
+                passwordListDiv.innerHTML = `<p class="text-center text-gray-400 py-4">No se encontraron contraseñas que coincidan con tu búsqueda.</p>`;
+            }
+            else {
+                emptyVaultMessage.classList.add('hidden');
+            }
+
+            filteredPasswords.forEach((entry, index) => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = `password-entry bg-gray-700 p-4 rounded-lg shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center category-${entry.category || 'other'}`;
+                
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'flex-grow mb-3 md:mb-0';
+                detailsDiv.innerHTML = `
+                    <h3 class="text-lg font-semibold text-gray-100">${escapeHtml(entry.name)}</h3>
+                    <p class="text-sm text-gray-300">Usuario: ${escapeHtml(entry.username)}</p>
+                    <p class="text-sm text-gray-400">Categoría: ${escapeHtml(entry.category.charAt(0).toUpperCase() + entry.category.slice(1))}</p>
+                    <div class="mt-2" id="password-display-${index}" style="display: none;">
+                        <p class="text-sm text-gray-300">Contraseña: <span id="pwd-text-${index}">${escapeHtml(entry.password)}</span></p>
+                        ${entry.notes ? `<p class="text-sm text-gray-400 mt-1">Notas: ${escapeHtml(entry.notes)}</p>` : ''}
+                    </div>
+                `;
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'flex space-x-2 items-center flex-shrink-0';
+                
+                const toggleBtn = document.createElement('button');
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+                toggleBtn.title = "Mostrar/Ocultar Contraseña";
+                toggleBtn.className = 'text-blue-400 hover:text-blue-300 p-2 rounded btn';
+                toggleBtn.onclick = () => {
+                    const passwordDisplay = document.getElementById(`password-display-${index}`);
+                    const icon = toggleBtn.querySelector('i');
+                    if (passwordDisplay.style.display === 'none') {
+                        passwordDisplay.style.display = 'block';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        passwordDisplay.style.display = 'none';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                };
+
+                const copyBtn = document.createElement('button');
+                copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+                copyBtn.title = "Copiar Contraseña";
+                copyBtn.className = 'text-green-400 hover:text-green-300 p-2 rounded btn';
+				// ... (código anterior) ...
+				                copyBtn.onclick = async () => {
+				                    if (window.electronAPI && window.electronAPI.copyToClipboard) {
+				                        const result = await window.electronAPI.copyToClipboard(entry.password);
+				                        if (result.success) {
+				                            showModal('Contraseña copiada al portapapeles.');
+				                        } else {
+				                            showModal('Error al copiar la contraseña: ' + (result.error || 'Error desconocido'));
+				                            console.error('Error al copiar:', result.error);
+				                        }
+				                    } else {
+				                        // Fallback si electronAPI no está disponible (no debería pasar en Electron)
+				                        console.warn("electronAPI.copyToClipboard no está disponible. Usando método de fallback (puede no funcionar).");
+				                        const tempInput = document.createElement("input");
+				                        tempInput.style.position = "absolute";
+				                        tempInput.style.left = "-9999px";
+				                        tempInput.value = entry.password;
+				                        document.body.appendChild(tempInput);
+				                        tempInput.select();
+				                        try {
+				                            document.execCommand('copy');
+				                            showModal('Contraseña copiada (fallback).');
+				                        } catch (err) {
+				                            showModal('Error al copiar la contraseña (fallback).');
+				                        }
+				                        document.body.removeChild(tempInput);
+				                    }
+				                };
+				// ... (código posterior) ...
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                deleteBtn.title = "Eliminar Entrada";
+                deleteBtn.className = 'text-red-400 hover:text-red-300 p-2 rounded btn';
+                deleteBtn.onclick = () => {
+                    if (confirm(`¿Estás seguro de que quieres eliminar la entrada para "${entry.name}"?`)) {
+                        passwords.splice(index, 1); // Remove from in-memory array
+                        saveVault(); // Re-encrypt and save the updated vault
+                        renderPasswords(); // Re-render the list
+                    }
+                };
+
+                actionsDiv.appendChild(toggleBtn);
+                actionsDiv.appendChild(copyBtn);
+                actionsDiv.appendChild(deleteBtn);
+                
+                entryDiv.appendChild(detailsDiv);
+                entryDiv.appendChild(actionsDiv);
+                passwordListDiv.appendChild(entryDiv);
+            });
+        }
+        
+        function escapeHtml(unsafe) {
+            if (unsafe === null || typeof unsafe === 'undefined') return '';
+            return unsafe
+                 .toString()
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        // --- Event Handlers ---
+        setMasterPasswordBtn.addEventListener('click', async () => {
+            const newPass = newMasterPasswordInput.value;
+            const confirmPass = confirmMasterPasswordInput.value;
+            masterPasswordError.textContent = '';
+
+            if (newPass.length < 8) {
+                masterPasswordError.textContent = 'La contraseña maestra debe tener al menos 8 caracteres.';
+                return;
+            }
+            if (newPass !== confirmPass) {
+                masterPasswordError.textContent = 'Las contraseñas no coinciden.';
+                return;
+            }
+
+            try {
+                const salt = window.crypto.getRandomValues(new Uint8Array(16)); // Generate a new salt
+                masterKey = await deriveKey(newPass, salt); // Derive the key
+                
+                passwords = []; // Initialize with an empty password list
+                const { ciphertext, iv } = await encryptData(masterKey, JSON.stringify(passwords));
+
+                localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify({
+                    salt: bufferToHex(salt),
+                    iv: bufferToHex(iv),
+                    ciphertext: bufferToHex(ciphertext)
+                }));
+
+                masterPasswordScreen.classList.add('hidden');
+                vaultScreen.classList.remove('hidden');
+                renderPasswords();
+                showModal("Contraseña Maestra establecida y bóveda creada. ¡Ya puedes añadir contraseñas!");
+            } catch (error) {
+                console.error("Error setting up master password:", error);
+                masterPasswordError.textContent = 'Error al configurar la contraseña maestra.';
+                showModal("Error al configurar la contraseña maestra: " + error.message);
+            }
+        });
+
+        loginBtn.addEventListener('click', async () => {
+            const loginPass = loginMasterPasswordInput.value;
+            masterPasswordError.textContent = '';
+
+            if (!loginPass) {
+                masterPasswordError.textContent = 'Por favor, ingresa tu contraseña maestra.';
+                return;
+            }
+
+            const storedVaultData = JSON.parse(localStorage.getItem(VAULT_STORAGE_KEY));
+            if (!storedVaultData || !storedVaultData.salt || !storedVaultData.iv || !storedVaultData.ciphertext) {
+                masterPasswordError.textContent = 'No se encontró la bóveda o está corrupta. Considera configurar una nueva.';
+                // Optionally show setup screen again
+                // masterPasswordLoginDiv.classList.add('hidden');
+                // masterPasswordSetupDiv.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const salt = hexToBuffer(storedVaultData.salt);
+                const iv = hexToBuffer(storedVaultData.iv);
+                const ciphertext = hexToBuffer(storedVaultData.ciphertext);
+
+                const key = await deriveKey(loginPass, salt);
+                const decryptedData = await decryptData(key, ciphertext, iv);
+
+                if (decryptedData === null) {
+                    masterPasswordError.textContent = 'Contraseña maestra incorrecta.';
+                    loginMasterPasswordInput.value = ''; // Clear input
+                    return;
+                }
+
+                masterKey = key; // Store derived key for the session
+                passwords = JSON.parse(decryptedData);
+                
+                masterPasswordScreen.classList.add('hidden');
+                vaultScreen.classList.remove('hidden');
+                loginMasterPasswordInput.value = ''; // Clear input
+                renderPasswords();
+            } catch (error) {
+                console.error("Login error:", error);
+                masterPasswordError.textContent = 'Error al intentar descifrar la bóveda.';
+                showModal("Error al intentar descifrar la bóveda: " + error.message);
+            }
+        });
+        
+        // Allow Enter key for login
+        loginMasterPasswordInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                loginBtn.click();
+            }
+        });
+        // Allow Enter key for master password setup
+        confirmMasterPasswordInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                setMasterPasswordBtn.click();
+            }
+        });
+
+
+        addPasswordBtn.addEventListener('click', async () => {
+            const siteName = siteNameInput.value.trim();
+            const username = usernameInput.value.trim();
+            const sitePassword = sitePasswordInput.value; // Don't trim password
+            const category = categoryInput.value;
+            const notes = notesInput.value.trim();
+            addPasswordError.textContent = '';
+
+            if (!siteName || !username || !sitePassword) {
+                addPasswordError.textContent = 'Nombre del sitio, usuario y contraseña son obligatorios.';
+                return;
+            }
+
+            const newEntry = {
+                id: Date.now().toString(), // Simple unique ID
+                name: siteName,
+                username: username,
+                password: sitePassword,
+                category: category,
+                notes: notes
+            };
+
+            passwords.push(newEntry);
+            await saveVault();
+            renderPasswords();
+
+            // Clear form fields
+            siteNameInput.value = '';
+            usernameInput.value = '';
+            sitePasswordInput.value = '';
+            notesInput.value = '';
+            categoryInput.value = 'other'; // Reset to default
+            togglePasswordVisibility(sitePasswordInput, togglePasswordVisibilityAddBtn.querySelector('i'), true); // Hide password after adding
+            showModal(`Contraseña para "${siteName}" añadida correctamente.`);
+        });
+
+        lockVaultBtn.addEventListener('click', () => {
+            masterKey = null; // Clear the master key from memory
+            passwords = [];   // Clear decrypted passwords from memory
+            vaultScreen.classList.add('hidden');
+            masterPasswordScreen.classList.remove('hidden');
+            // No need to show setup, just login
+            masterPasswordLoginDiv.classList.remove('hidden'); 
+            masterPasswordSetupDiv.classList.add('hidden');
+            masterPasswordError.textContent = ''; // Clear any previous errors
+            addPasswordError.textContent = ''; // Clear add form errors
+            searchPasswordsInput.value = ''; // Clear search
+            showModal("Bóveda bloqueada.");
+        });
+
+        searchPasswordsInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filtered = passwords.filter(p => 
+                p.name.toLowerCase().includes(searchTerm) ||
+                p.username.toLowerCase().includes(searchTerm) ||
+                p.category.toLowerCase().includes(searchTerm)
+            );
+            renderPasswords(filtered);
+        });
+
+        function togglePasswordVisibility(inputElement, iconElement, forceHide = false) {
+            if (forceHide) {
+                inputElement.type = 'password';
+                iconElement.classList.remove('fa-eye-slash');
+                iconElement.classList.add('fa-eye');
+            } else {
+                if (inputElement.type === 'password') {
+                    inputElement.type = 'text';
+                    iconElement.classList.remove('fa-eye');
+                    iconElement.classList.add('fa-eye-slash');
+                } else {
+                    inputElement.type = 'password';
+                    iconElement.classList.remove('fa-eye-slash');
+                    iconElement.classList.add('fa-eye');
+                }
+            }
+        }
+        
+        togglePasswordVisibilityAddBtn.addEventListener('click', () => {
+            togglePasswordVisibility(sitePasswordInput, togglePasswordVisibilityAddBtn.querySelector('i'));
+        });
+
+        generatePasswordBtn.addEventListener('click', () => {
+            const length = 16; // Default length for generated password
+            const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+            let retVal = "";
+            for (let i = 0, n = charset.length; i < length; ++i) {
+                retVal += charset.charAt(Math.floor(Math.random() * n));
+            }
+            sitePasswordInput.type = 'text'; // Show generated password
+            togglePasswordVisibilityAddBtn.querySelector('i').classList.remove('fa-eye');
+            togglePasswordVisibilityAddBtn.querySelector('i').classList.add('fa-eye-slash');
+            sitePasswordInput.value = retVal;
+            showModal("Contraseña segura generada.");
+        });
+
+
+        // --- Initial Load ---
+        // Check if a vault exists to determine initial screen
+        if (!loadPasswordsFromStorage()) {
+            // No vault, setup screen is already visible
+        }
+    </script>
+</body>
+</html>

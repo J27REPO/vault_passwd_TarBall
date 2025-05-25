@@ -1,0 +1,39 @@
+{
+  "name": "gestor-contrasenas-seguro",
+  "version": "1.0.0",
+  "description": "Gestor de contraseñas local y seguro empaquetado con Electron.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --linux tar.gz"
+  },
+  "keywords": [
+    "password",
+    "manager",
+    "security",
+    "electron"
+  ],
+  "author": "Tu Nombre o Nickname",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.tu-dominio.gestorcontrasenaseguro",
+    "productName": "Gestor de Contraseñas Seguro",
+    "linux": {
+      "target": [
+        "tar.gz"
+      ],
+      "category": "Utility;Security;",
+      "icon": "build/icon.png"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "gestor_contrasenas.html",
+      "node_modules/**/*"
+    ]
+  }
+}
