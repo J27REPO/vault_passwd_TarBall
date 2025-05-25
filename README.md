@@ -120,3 +120,16 @@ Este proyecto se distribuye bajo la **Licencia MIT**. Ver el archivo `LICENSE` p
 ---
 
 *Si tienes alguna pregunta o problema, no dudes en abrir un "Issue".*
+
+## Futuras implementaciones
+
+* Creación de clave de acceso para desencriptado automático
+* Mejoras de personalización de la vista
+* Rediseño de interfaz minimalista y moderno.
+* Mejorar usabilidad de la interfaz
+* Posibilidad de selección de temas personalizados precompilados
+* Selección de localización del vault personalizada.
+* Posibilidad de modificar passwd ya creadas
+
+**no dudes en contactar conmigo para sugerencias a cerca de la app: josesf2004@gmail.com**
+  
