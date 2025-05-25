@@ -1,0 +1,13 @@
+# Dependencias
+/node_modules
+
+# Salida de compilación/empaquetado
+/dist
+
+# Archivos de log de npm
+npm-debug.log*
+*.log
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
