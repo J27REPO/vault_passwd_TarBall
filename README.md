@@ -31,7 +31,7 @@ Tienes dos opciones para usar la aplicación:
 **Opción 1: Usar una Release Preconstruida (Recomendado para usuarios finales)**
 
 1.  **Descarga la Última Versión:**
-    * Ve a la sección de **[Releases](https://github.com/tu-usuario/vault_passwd_TarBall/releases)** de este repositorio.
+    * Ve a la sección de **[Releases](https://github.com/J27REPO/vault_passwd_TarBall/releases)** de este repositorio.
     * Descarga el archivo `.tar.gz` más reciente para Linux (por ejemplo, `gestor-contrasenas-seguro-v1.0.0.tar.gz`).
 
 2.  **Extrae el Archivo:**
