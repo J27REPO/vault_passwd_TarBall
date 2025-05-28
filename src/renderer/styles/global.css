@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tus estilos base personalizados pueden ir aquí debajo */
+body {
+  /* Ejemplo usando tus colores definidos en tailwind.config.js */
+  @apply bg-brand-dark text-brand-light; 
+  font-family: 'Inter', sans-serif; /* O la fuente que prefieras */
+}
+/* Estilos del scrollbar que tenías */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    @apply bg-brand-surface; /* Usando tu color de marca */
+}
+::-webkit-scrollbar-thumb {
+    @apply bg-brand-muted rounded; /* Usando tu color de marca */
+}
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500; /* O un color de hover que definas */
+}
