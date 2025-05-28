@@ -6,7 +6,8 @@ import MasterPasswordLogin from './components/MasterPasswordLogin.js';
 import MasterPasswordSetup from './components/MasterPasswordSetup.js';
 import VaultScreen from './components/VaultScreen.js';
 
-import { encryptData, bufferToHex } from './cryptoUtils.js';
+// Funciones de cripto que necesitaremos aquí
+import { encryptData, bufferToHex, deriveKey, decryptData, hexToBuffer } from './cryptoUtils.js';
 
 // Estilos para el contenedor principal de la aplicación
 const appContainerStyle = {
@@ -30,39 +31,138 @@ const mainContentStyle = {
     boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
 };
 
-const VAULT_STORAGE_KEY = 'securePasswordVault';
+const VAULT_PATH_STORAGE_KEY = 'securePasswordVaultPath';
 
 function App() {
-  // Estados principales de la aplicación
-  const [currentScreen, setCurrentScreen] = useState('loading'); // 'loading', 'setup', 'login', 'vault'
-  const [masterKeySession, setMasterKeySession] = useState(null); // La clave derivada para la sesión actual
-  const [passwordsSession, setPasswordsSession] = useState([]);   // Array de contraseñas descifradas
-  const [appError, setAppError] = useState(''); // Para mostrar errores generales o de autenticación
+  const [currentScreen, setCurrentScreen] = useState('loading');
+  // masterKeySession ahora será un objeto: { key: CryptoKey, saltHex: string } | null
+  const [masterKeySession, setMasterKeySession] = useState(null); 
+  const [passwordsSession, setPasswordsSession] = useState([]);
+  const [appError, setAppError] = useState('');
+  const [vaultFilePath, setVaultFilePath] = useState(null);
+  const [isLoadingVault, setIsLoadingVault] = useState(true);
 
-  // Efecto para cargar el estado inicial de la bóveda al iniciar la app
-  useEffect(() => {
-    const storedVault = localStorage.getItem(VAULT_STORAGE_KEY);
-    if (!storedVault) {
+  // Función para intentar el desbloqueo automático o preparar para login/setup manual
+  const attemptAutoUnlockOrCreateSetup = async (filePath) => {
+    setIsLoadingVault(true); // Iniciar carga
+    setAppError(''); // Limpiar errores previos
+
+    if (!filePath) {
+      console.log("[App.js] No hay ruta de bóveda (filePath es null/undefined), yendo a setup.");
       setCurrentScreen('setup');
-      setAppError(''); 
-    } else {
+      setIsLoadingVault(false);
+      return;
+    }
+
+    console.log("[App.js] Ruta de bóveda para procesar:", filePath);
+    setVaultFilePath(filePath); // Asegurar que el estado vaultFilePath esté actualizado para el login manual si es necesario
+
+    // Verificar si las APIs de Electron están disponibles
+    if (!window.electronAPI || 
+        !window.electronAPI.keytarGetMasterPassword || 
+        !window.electronAPI.readVaultFile ||
+        !window.electronAPI.keytarDeleteMasterPassword) {
+      setAppError("Funciones críticas de la API de Electron no están disponibles.");
+      setCurrentScreen('login'); // Ir a login manual como fallback si la API no está
+      setIsLoadingVault(false);
+      return;
+    }
+
+    // 1. Intentar obtener la contraseña maestra del llavero
+    const keytarResult = await window.electronAPI.keytarGetMasterPassword();
+
+    if (keytarResult.success && keytarResult.password) {
+      const rememberedPassword = keytarResult.password;
+      console.log("[App.js] Contraseña maestra recuperada del llavero. Intentando descifrar...");
+
+      // 2. Si se obtuvo, intentar descifrar la bóveda
+      const readResult = await window.electronAPI.readVaultFile(filePath);
+      if (readResult.success && readResult.data) {
+        try {
+          const storedVaultData = JSON.parse(readResult.data);
+          if (!storedVaultData.salt || !storedVaultData.iv || !storedVaultData.ciphertext) {
+            throw new Error("Datos de la bóveda en archivo incompletos o corruptos.");
+          }
+
+          const saltFromFileHex = storedVaultData.salt;
+          const saltBuffer = hexToBuffer(saltFromFileHex);
+          const ivBuffer = hexToBuffer(storedVaultData.iv);
+          const ciphertextBuffer = hexToBuffer(storedVaultData.ciphertext);
+
+          const derivedKey = await deriveKey(rememberedPassword, saltBuffer);
+          const decryptedDataString = await decryptData(derivedKey, ciphertextBuffer, ivBuffer);
+
+          if (decryptedDataString !== null) {
+            console.log("[App.js] Desbloqueo automático exitoso.");
+            const decryptedPasswords = JSON.parse(decryptedDataString);
+            // Llamar a handleUnlockSuccess que actualiza el estado y la pantalla
+            handleUnlockSuccess({ key: derivedKey, saltHex: saltFromFileHex }, decryptedPasswords);
+            // setIsLoadingVault(false); // handleUnlockSuccess ya podría cambiar la pantalla
+            // return; // Éxito, salir de la función
+          } else {
+            console.warn("[App.js] Contraseña del llavero incorrecta para la bóveda. Borrando del llavero.");
+            await window.electronAPI.keytarDeleteMasterPassword();
+            setAppError("La contraseña maestra guardada no es correcta. Por favor, ingrésala manualmente.");
+            setCurrentScreen('login'); // Ir a login manual
+          }
+        } catch (error) {
+          console.error("[App.js] Error al procesar la bóveda durante el desbloqueo automático:", error);
+          setAppError(`Error al procesar la bóveda: ${error.message}. Puede estar corrupta.`);
+          setCurrentScreen('login'); // Ir a login manual
+        }
+      } else {
+        // El archivo no se pudo leer (podría no existir en la ruta guardada)
+        console.warn(`[App.js] No se pudo leer el archivo de la bóveda en ${filePath} para desbloqueo automático. Código: ${readResult.code}, Error: ${readResult.error}`);
+        setAppError(`No se pudo leer la bóveda en la ruta guardada. Por favor, verifica la ruta o crea una nueva bóveda.`);
+        // Si no se puede leer, podría ser que el archivo fue borrado. Permitir al usuario loguear
+        // y el componente Login manejará el error de archivo no encontrado.
+        // O mejor, ir a setup si el archivo no existe.
+        if (readResult.code === 'ENOENT') { // ENOENT: Error NO ENTry (archivo o directorio no existe)
+            localStorage.removeItem(VAULT_PATH_STORAGE_KEY); // Limpiar ruta incorrecta
+            setVaultFilePath(null);
+            setCurrentScreen('setup');
+            setAppError("El archivo de la bóveda no se encontró en la ruta guardada. Por favor, configura una nueva bóveda o abre una existente.");
+        } else {
+            setCurrentScreen('login'); // Para otros errores de lectura, intentar login manual
+        }
+      }
+    } else { // No hay contraseña en el llavero o hubo error al obtenerla
+      if (keytarResult.success && keytarResult.password === null) {
+        console.log("[App.js] No hay contraseña maestra guardada en el llavero para desbloqueo automático.");
+      } else if (!keytarResult.success) {
+        console.warn("[App.js] Error al intentar obtener contraseña del llavero:", keytarResult.error);
+      }
+      console.log("[App.js] Desbloqueo automático no realizado o no aplicable, yendo a login manual.");
       setCurrentScreen('login');
     }
+    setIsLoadingVault(false);
+  };
+
+
+  useEffect(() => {
+    const storedPath = localStorage.getItem(VAULT_PATH_STORAGE_KEY);
+    attemptAutoUnlockOrCreateSetup(storedPath);
   }, []);
 
-  // --- Funciones Callback para los Componentes Hijos ---
-  const handleUnlockSuccess = (key, decryptedPasswords) => {
-    setMasterKeySession(key);
+  const displayError = (message) => { setAppError(message); };
+
+  const handleUnlockSuccess = (masterKeyObject, decryptedPasswords) => {
+    setMasterKeySession(masterKeyObject);
     setPasswordsSession(decryptedPasswords);
     setCurrentScreen('vault');
     setAppError('');
+    setIsLoadingVault(false); // Asegurar que la carga ha terminado
   };
 
-  const handleSetupSuccess = (key, initialPasswordsArray) => {
-    setMasterKeySession(key);
+  const handleSetupSuccess = (masterKeyObject, initialPasswordsArray, filePath) => {
+    setMasterKeySession(masterKeyObject);
     setPasswordsSession(initialPasswordsArray);
+    setVaultFilePath(filePath);
+    localStorage.setItem(VAULT_PATH_STORAGE_KEY, filePath);
     setCurrentScreen('vault');
     setAppError('');
+    setIsLoadingVault(false); // Asegurar que la carga ha terminado
+    console.log("[App.js handleSetupSuccess] Bóveda configurada y guardada en:", filePath);
   };
 
   const handleLockVault = () => {
@@ -72,42 +172,37 @@ function App() {
     setAppError('');
   };
 
-  const displayError = (message) => {
-    setAppError(message);
-  };
-
-  // --- Funciones para Modificar la Bóveda ---
   const savePasswordsToVault = async (updatedPasswordsArray) => {
-    if (!masterKeySession) {
-      console.error("App.js - savePasswordsToVault: Error - Intento de guardar sin masterKey en sesión.");
-      displayError("Error al guardar: Sesión no válida. Intenta bloquear y desbloquear.");
+    if (!masterKeySession || !masterKeySession.key || !masterKeySession.saltHex) {
+      console.error("App.js - savePasswordsToVault: Error - masterKey o saltHex no disponibles en sesión.");
+      displayError("Error al guardar: Sesión no válida o incompleta.");
       return false;
     }
-    try {
-      const storedVaultDataString = localStorage.getItem(VAULT_STORAGE_KEY);
-      if (!storedVaultDataString) {
-          console.error("App.js - savePasswordsToVault: Error - No se encontró la bóveda en localStorage para obtener el salt.");
-          throw new Error("No se encontró la bóveda en localStorage para obtener el salt.");
-      }
-      const storedVaultData = JSON.parse(storedVaultDataString);
-      if (!storedVaultData.salt) {
-          console.error("App.js - savePasswordsToVault: Error - El salt no se encontró en los datos de la bóveda almacenada.");
-          throw new Error("El salt no se encontró en los datos de la bóveda almacenada.");
-      }
+    if (!vaultFilePath) {
+      console.error("App.js - savePasswordsToVault: Error - No hay ruta de archivo para la bóveda.");
+      displayError("Error al guardar: Ruta de archivo de la bóveda no definida.");
+      return false;
+    }
 
-      const { ciphertext, iv } = await encryptData(masterKeySession, JSON.stringify(updatedPasswordsArray));
+    try {
+      const saltForStorageInFile = masterKeySession.saltHex;
+      const keyForEncryption = masterKeySession.key;
+
+      const { ciphertext, iv } = await encryptData(keyForEncryption, JSON.stringify(updatedPasswordsArray));
       
       const vaultToStore = {
-        salt: storedVaultData.salt,
+        salt: saltForStorageInFile, 
         iv: bufferToHex(iv),
         ciphertext: bufferToHex(ciphertext)
       };
-      localStorage.setItem(VAULT_STORAGE_KEY, JSON.stringify(vaultToStore));
-      
-      // DEBUG: Log antes de llamar a setPasswordsSession
-      console.log("App.js - savePasswordsToVault: Llamando a setPasswordsSession con:", JSON.parse(JSON.stringify(updatedPasswordsArray)));
+
+      const writeResult = await window.electronAPI.writeVaultFile(vaultFilePath, JSON.stringify(vaultToStore));
+      if (!writeResult.success) {
+        throw new Error(`Fallo al escribir en el archivo de la bóveda: ${writeResult.error}`);
+      }
+
+      console.log("[App.js savePasswordsToVault] Llamando a setPasswordsSession con:", JSON.parse(JSON.stringify(updatedPasswordsArray)));
       setPasswordsSession(updatedPasswordsArray);
-      
       return true;
     } catch (error) {
       console.error("App.js - savePasswordsToVault: Error al guardar la bóveda:", error);
@@ -115,31 +210,28 @@ function App() {
       return false;
     }
   };
-
+  
   const handleAddPasswordEntry = async (newEntry) => {
-    // El ID ya debería estar generado por PasswordForm si es una nueva entrada
     const updatedPasswords = [...passwordsSession, newEntry];
     const success = await savePasswordsToVault(updatedPasswords);
     if (success) {
       console.log("App.js - handleAddPasswordEntry: Nueva contraseña añadida y bóveda guardada.");
-      displayError(''); // Limpiar errores si el guardado fue exitoso
+      displayError(''); 
     }
   };
 
-// En src/renderer/App.js
   const handleUpdatePasswordEntry = async (updatedEntryFromForm) => {
-    console.log("App.js - handleUpdatePasswordEntry: Llamada con:", JSON.parse(JSON.stringify(updatedEntryFromForm)));
-    console.log("App.js - handleUpdatePasswordEntry: passwordsSession ANTES de actualizar:", JSON.parse(JSON.stringify(passwordsSession)));
+    console.log("App.js - handleUpdatePasswordEntry: Llamada con (updatedEntryFromForm):", JSON.parse(JSON.stringify(updatedEntryFromForm || {})));
+    console.log("App.js - handleUpdatePasswordEntry: passwordsSession ANTES de actualizar:", JSON.parse(JSON.stringify(passwordsSession || [])));
 
     let found = false;
-    const updatedPasswordsArray = passwordsSession.map((p, index) => { // Añadir index para logging
-        // LOG DETALLADO DE COMPARACIÓN
+    const updatedPasswordsArray = passwordsSession.map((p, index) => {
         console.log(
-            `[App.js map iter ${index}] Comparando: p.id = "${p.id}" (tipo: ${typeof p.id}) CON updatedEntryFromForm.id = "${updatedEntryFromForm.id}" (tipo: ${typeof updatedEntryFromForm.id})`
+            `[App.js map iter ${index}] Comparando: p.id = "${p.id}" (tipo: ${typeof p.id}) CON updatedEntryFromForm.id = "${updatedEntryFromForm ? updatedEntryFromForm.id : 'undefined'}" (tipo: ${updatedEntryFromForm ? typeof updatedEntryFromForm.id : 'undefined'})`
         );
 
-        if (p.id === updatedEntryFromForm.id) {
-            console.log(`[App.js map iter ${index}] ¡Coincidencia encontrada! Actualizando entrada.`);
+        if (updatedEntryFromForm && p.id === updatedEntryFromForm.id) {
+            console.log(`[App.js map iter ${index}] ¡Coincidencia encontrada! Actualizando entrada:`, JSON.parse(JSON.stringify(p)));
             found = true;
             return { ...p, ...updatedEntryFromForm }; 
         }
@@ -147,8 +239,10 @@ function App() {
     });
 
     if (!found) {
-        // Este log ahora es más sospechoso si updatedEntryFromForm.id era válido antes del map
-        console.error("App.js - handleUpdatePasswordEntry: No se encontró la entrada con ID para actualizar. ID buscado (de updatedEntryFromForm.id):", updatedEntryFromForm.id);
+        console.error(
+            "App.js - handleUpdatePasswordEntry: No se encontró la entrada con ID para actualizar. ID buscado (de updatedEntryFromForm.id al final del map):", 
+            updatedEntryFromForm ? updatedEntryFromForm.id : "updatedEntryFromForm es nulo/undefined o no tiene id"
+        );
         displayError("Error: No se pudo encontrar la entrada para actualizar.");
         return;
     }
@@ -171,34 +265,52 @@ function App() {
     const success = await savePasswordsToVault(updatedPasswords);
     if (success) {
       console.log("App.js - handleDeletePasswordEntry: Contraseña eliminada y bóveda guardada.");
-      displayError(''); // Limpiar errores
+      displayError('');
     }
   };
 
-  // --- Renderizado Condicional de Pantallas ---
+  // --- Renderizado Condicional ---
   let screenContent;
 
-  if (currentScreen === 'loading') {
+  if (isLoadingVault || currentScreen === 'loading') {
     screenContent = <p className="text-xl text-center">Cargando aplicación...</p>;
   } else if (currentScreen === 'setup') {
     screenContent = (
-      <div>
-        <MasterPasswordSetup 
-          onSetupComplete={handleSetupSuccess}
-          onShowError={displayError}
-        />
-        {appError && <p className="text-red-400 text-sm mt-3 text-center">{appError}</p>}
-      </div>
+      <MasterPasswordSetup 
+        onSetupComplete={handleSetupSuccess}
+        onShowError={displayError}
+      />
     );
   } else if (currentScreen === 'login') {
     screenContent = (
       <div>
         <h1 className="text-3xl font-bold text-center text-blue-400 mb-6">Gestor de Contraseñas (React)</h1>
         <MasterPasswordLogin 
-            onUnlock={handleUnlockSuccess} 
-            onShowError={displayError} 
+            onUnlock={handleUnlockSuccess}
+            onShowError={displayError}
+            vaultFilePath={vaultFilePath}
         />
         {appError && <p className="text-red-400 text-sm mt-3 text-center">{appError}</p>}
+        {(currentScreen === 'login') && (
+             <button 
+                onClick={async () => {
+                    if (!window.electronAPI || !window.electronAPI.showOpenVaultDialog) {
+                        displayError("Error: La función para abrir diálogo no está disponible.");
+                        return;
+                    }
+                    const { canceled, filePath: newPath } = await window.electronAPI.showOpenVaultDialog();
+                    if (!canceled && newPath) {
+                        localStorage.setItem(VAULT_PATH_STORAGE_KEY, newPath); // Guardar nueva ruta
+                        setAppError(''); 
+                        // Recargar la lógica de inicio con la nueva ruta
+                        attemptAutoUnlockOrCreateSetup(newPath); 
+                    }
+                }}
+                className="mt-4 w-full text-sm bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded"
+            >
+                Abrir Otra Bóveda
+            </button>
+        )}
       </div>
     );
   } else if (currentScreen === 'vault') {
